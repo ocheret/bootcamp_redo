@@ -1,12 +1,13 @@
 use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, FromRow, Debug)]
 pub struct Question {
     pub title: String,
     pub description: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, FromRow)]
 pub struct QuestionDetail {
     pub question_uuid: String,
     pub title: String,
