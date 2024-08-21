@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate log;
 
-extern crate pretty_env_logger;
+use pretty_env_logger;
 
 use axum::{
     routing::{delete, get, post},
@@ -21,6 +21,12 @@ use handlers::*;
 #[tokio::main]
 async fn main() {
     pretty_env_logger::init();
+    // Test it out
+    info!("such information");
+    warn!("o_O");
+    error!("much error");
+    debug!("so debug");
+
     dotenv().ok();
 
     let pool = PgPoolOptions::new()
@@ -29,15 +35,7 @@ async fn main() {
         .await
         .expect("Failed to create Postgres connection pool!");
 
-    // TODO: Delete this query
-    let recs = sqlx::query!("SELECT * FROM questions")
-        .fetch_all(&pool)
-        .await
-        .unwrap();
-
-    // TODO: Delete these log statements
-    info!("********* Question Records *********");
-    info!("{:?}", recs);
+    info!("Database connection pool created.");
 
     let app = Router::new()
         .route("/question", post(create_question))
@@ -48,8 +46,10 @@ async fn main() {
         .route("/answer", delete(delete_answer));
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:8000")
-        .await
-        .unwrap();
+    .await
+    .unwrap();
+
+    info!("Starting server...");
 
     axum::serve(listener, app).await.unwrap();
 }

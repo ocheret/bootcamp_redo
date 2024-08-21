@@ -1,5 +1,6 @@
+use crate::models;
 use async_trait::async_trait;
-use sqlx::PgPool;
+use sqlx::{types::Uuid, PgPool};
 
 use crate::models::{postgres_error_codes, Answer, AnswerDetail, DBError};
 
@@ -16,7 +17,8 @@ pub struct AnswersDaoImpl {
 
 impl AnswersDaoImpl {
     pub fn new(db: PgPool) -> Self {
-        todo!() // return an instance of AnswersDaoImpl
+        // return an instance of AnswersDaoImpl
+        AnswersDaoImpl { db }
     }
 }
 
@@ -29,7 +31,8 @@ impl AnswersDao for AnswersDaoImpl {
         //
         // If `parse_str` returns an error, map the error to a `DBError::InvalidUUID` error
         // and early return from this function.
-        let uuid = todo!();
+        let uuid = Uuid::parse_str(&answer.question_uuid)
+            .map_err(|_| DBError::InvalidUUID(answer.question_uuid.clone()))?;
 
         // Make a database query to insert a new answer.
         // Here is the SQL query:
@@ -42,14 +45,31 @@ impl AnswersDao for AnswersDaoImpl {
         // the error code matches `postgres_error_codes::FOREIGN_KEY_VIOLATION`.
         // If so early return the `DBError::InvalidUUID` error. Otherwise early return
         // the `DBError::Other` error.
-        let record = todo!();
+        let query = sqlx::query!("INSERT INTO answers ( question_uuid, content ) VALUES ( $1, $2 ) RETURNING *", uuid, answer.content);
+        let result = query.fetch_one(&self.db).await;
+        let record = result.map_err(|e| {
+            println!("Error inside closure: {:?}", e);
+            match e {
+                sqlx::Error::Database(pe) => {
+                    if pe.code().unwrap() == postgres_error_codes::FOREIGN_KEY_VIOLATION {
+                        return DBError::InvalidUUID(answer.question_uuid.clone());
+                    }
+                    return DBError::Other(Box::new(pe));
+                },
+                _ => {
+                    return DBError::Other(Box::new(e));
+                  }
+            }
+        })?;
+
+        println!("Answer created: {:?}", record);
 
         // Populate the AnswerDetail fields using `record`.
         Ok(AnswerDetail {
-            answer_uuid: todo!(),
-            question_uuid: todo!(),
-            content: todo!(),
-            created_at: todo!(),
+            answer_uuid: record.answer_uuid.to_string(),
+            question_uuid: record.question_uuid.to_string(),
+            content: record.content,
+            created_at: record.created_at.to_string(),
         })
     }
 
@@ -59,7 +79,8 @@ impl AnswersDao for AnswersDaoImpl {
         //
         // If `parse_str` returns an error, map the error to a `DBError::InvalidUUID` error
         // and early return from this function.
-        let uuid = todo!();
+        let uuid = Uuid::parse_str(&answer_uuid)
+            .map_err(|_| DBError::InvalidUUID(answer_uuid.clone()))?;
 
         // TODO: Make a database query to delete an answer given the answer uuid.
         // Here is the SQL query:
@@ -68,6 +89,13 @@ impl AnswersDao for AnswersDaoImpl {
         // ```
         // If executing the query results in an error, map that error
         // to a `DBError::Other` error and early return from this function.
+        let query = sqlx::query!("DELETE FROM answers WHERE answer_uuid = $1", uuid);
+        let result = query.execute(&self.db).await;
+        result.map_err(|e| {
+            println!("Error inside closure: {:?}", e);
+            DBError::Other(Box::new(e))
+        })?;
+
 
         Ok(())
     }
@@ -78,7 +106,8 @@ impl AnswersDao for AnswersDaoImpl {
         //
         // If `parse_str` returns an error, map the error to a `DBError::InvalidUUID` error
         // and early return from this function.
-        let uuid = todo!();
+        let uuid = Uuid::parse_str(&question_uuid)
+            .map_err(|_| DBError::InvalidUUID(question_uuid.clone()))?;
 
         // Make a database query to get all answers associated with a question uuid.
         // Here is the SQL query:
@@ -87,10 +116,23 @@ impl AnswersDao for AnswersDaoImpl {
         // ```
         // If executing the query results in an error, map that error
         // to a `DBError::Other` error and early return from this function.
-        let records = todo!();
+        let query = sqlx::query!("SELECT * FROM answers WHERE question_uuid = $1", uuid);
+        let result = query.fetch_all(&self.db).await;
+        let records = result.map_err(|e| {
+            println!("Error inside closure: {:?}", e);
+            DBError::Other(Box::new(e))
+        })?;
 
         // Iterate over `records` and map each record to a `AnswerDetail` type
-        let answers = todo!();
+        let mut answers = Vec::new();
+        for record in records {
+            answers.push(AnswerDetail {
+                answer_uuid: record.answer_uuid.to_string(),
+                question_uuid: record.question_uuid.to_string(),
+                content: record.content,
+                created_at: record.created_at.to_string(),
+            });
+        }
 
         Ok(answers)
     }
