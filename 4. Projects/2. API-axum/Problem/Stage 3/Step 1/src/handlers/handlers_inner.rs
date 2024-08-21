@@ -1,3 +1,5 @@
+use tokio::sync::broadcast::error;
+
 use crate::{
     models::{Answer, AnswerDetail, AnswerId, DBError, Question, QuestionDetail, QuestionId},
     persistance::{answers_dao::AnswersDao, questions_dao::QuestionsDao},
@@ -20,13 +22,22 @@ pub async fn create_question(
     // We are using a trait object here so that inner handlers do not depend on concrete DAO implementations
     questions_dao: &(dyn QuestionsDao + Sync + Send),
 ) -> Result<QuestionDetail, HandlerError> {
-    let question = todo!(); // create question using `questions_dao`
+    let question = questions_dao.create_question(question).await; // create question using `questions_dao`
 
     match question {
-        Ok(question) => todo!(), // return question
+        Ok(question) => Ok(question), // return question
         Err(err) => {
             // TODO: log err using error! macro
-            todo!() // return a default internal error using the HandlerError type
+            error!("Error creating question: {:?}", err);
+
+            // *** Apparently we don't want to consider a UUID error as an internal error ***
+            //
+            // return a default internal error using the HandlerError type
+            // match err {
+            //     DBError::InvalidUUID(s) => Err(HandlerError::BadRequest(s)),
+            //     _ => Err(HandlerError::default_internal_error()),
+            // }
+            Err(HandlerError::default_internal_error())
         }
     }
 }
@@ -34,13 +45,15 @@ pub async fn create_question(
 pub async fn read_questions(
     questions_dao: &(dyn QuestionsDao + Sync + Send),
 ) -> Result<Vec<QuestionDetail>, HandlerError> {
-    let questions = todo!(); // get questions using `questions_dao`
+    let questions = questions_dao.get_questions().await; // get questions using `questions_dao`
 
     match questions {
-        Ok(questions) => todo!(), // return questions
+        Ok(questions) => Ok(questions), // return questions
         Err(err) => {
             // TODO: log err using error! macro
-            todo!() // return a default internal error using the HandlerError type
+            error!("Error reading questions: {:?}", err);
+            // return a default internal error using the HandlerError type
+            Err(HandlerError::default_internal_error())
         }
     }
 }
@@ -49,10 +62,11 @@ pub async fn delete_question(
     question_uuid: QuestionId,
     questions_dao: &(dyn QuestionsDao + Sync + Send),
 ) -> Result<(), HandlerError> {
-    let result = todo!(); // delete question using `questions_dao`
+    let result = questions_dao.delete_question(question_uuid.question_uuid).await; // delete question using `questions_dao`
 
     if result.is_err() {
-        return todo!(); // return a default internal error using the HandlerError type
+        error!("Error deleting question: {:?}", result);
+        return Err(HandlerError::default_internal_error()); // return a default internal error using the HandlerError type
     }
 
     Ok(())
@@ -62,16 +76,17 @@ pub async fn create_answer(
     answer: Answer,
     answers_dao: &(dyn AnswersDao + Send + Sync),
 ) -> Result<AnswerDetail, HandlerError> {
-    let answer = todo!(); // create answer using `answers_dao`
+    let answer = answers_dao.create_answer(answer).await; // create answer using `answers_dao`
 
     match answer {
-        Ok(answer) => todo!(), // return answer
+        Ok(answer) => Ok(answer), // return answer
         Err(err) => {
             // TODO: log err using error! macro
+            error!("Error creating answer: {:?}", err);
 
             match err {
-                DBError::InvalidUUID(s) => todo!(), // return a `HandlerError::BadRequest` error passing in s as the string
-                _ => todo!(), // return a default internal error using the HandlerError type
+                DBError::InvalidUUID(s) => Err(HandlerError::BadRequest(s)), // return a `HandlerError::BadRequest` error passing in s as the string
+                _ => Err(HandlerError::default_internal_error()), // return a default internal error using the HandlerError type
             }
         }
     }
@@ -81,13 +96,14 @@ pub async fn read_answers(
     question_uuid: QuestionId,
     answers_dao: &(dyn AnswersDao + Send + Sync),
 ) -> Result<Vec<AnswerDetail>, HandlerError> {
-    let answers = todo!(); // get answers using `answers_dao`
+    let answers = answers_dao.get_answers(question_uuid.question_uuid).await; // get answers using `answers_dao`
 
     match answers {
-        Ok(answers) => todo!(), // return answers
+        Ok(answers) => Ok(answers), // return answers
         Err(e) => {
             // TODO: log err using error! macro
-            todo!() // return a default internal error using the HandlerError type
+            error!("Error reading answers: {:?}", e);
+            Err(HandlerError::default_internal_error()) // return a default internal error using the HandlerError type
         }
     }
 }
@@ -96,10 +112,11 @@ pub async fn delete_answer(
     answer_uuid: AnswerId,
     answers_dao: &(dyn AnswersDao + Send + Sync),
 ) -> Result<(), HandlerError> {
-    let result = todo!(); // delete answer using `answers_dao`
+    let result = answers_dao.delete_answer(answer_uuid.answer_uuid).await; // delete answer using `answers_dao`
 
     if result.is_err() {
-        return todo!(); // return a default internal error using the HandlerError type
+        error!("Error deleting answer: {:?}", result);
+        return Err(HandlerError::default_internal_error()); // return a default internal error using the HandlerError type
     }
 
     Ok(())
@@ -256,6 +273,7 @@ mod tests {
         let questions_dao: Box<dyn QuestionsDao + Send + Sync> = Box::new(questions_dao);
 
         let result = create_question(question, questions_dao.as_ref()).await;
+        println!("***In create_question_should_return_error: {:?}", result);
 
         assert!(result.is_err());
         assert!(
